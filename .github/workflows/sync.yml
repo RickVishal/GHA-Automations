@@ -14,23 +14,22 @@ jobs:
 
     env:
       TARGET_REPO: "DSA-Leetcode-Solutions"
+      SCRIPT_DIR:  "Leetcode Sync"
 
     steps:
-      # ── 1. Checkout the current (automation) repo ────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Set up Python (no pip cache — avoids requirements.txt error) ──
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # ── 3. Install dependencies ───────────────────────────────────────────
       - name: Install dependencies
-        run: pip install requests python-slugify
+        run: |
+          cd "$SCRIPT_DIR"
+          pip install -r requirements.txt
 
-      # ── 4. Create target repo if it doesn't exist ─────────────────────────
       - name: Create target repo if missing
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -58,7 +57,6 @@ jobs:
             echo "Repo already exists — skipping creation."
           fi
 
-      # ── 5. Clone the target repo into ./target ────────────────────────────
       - name: Clone target repo
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -67,16 +65,16 @@ jobs:
             https://x-access-token:$GH_TOKEN@github.com/${{ github.repository_owner }}/$TARGET_REPO.git \
             target
 
-      # ── 6. Run the sync script (writes into ./target) ─────────────────────
       - name: Sync LeetCode solutions
         env:
           LEETCODE_SESSION: ${{ secrets.LEETCODE_SESSION }}
           LEETCODE_CSRF:    ${{ secrets.LEETCODE_CSRF }}
           OUTPUT_DIR:       target/solutions
           README_PATH:      target/README.md
-        run: python "Leetcode Sync/sync_leetcode.py"
+        run: |
+          cd "$SCRIPT_DIR"
+          python sync_leetcode.py
 
-      # ── 7. Commit and push into the target repo ───────────────────────────
       - name: Commit and push to target repo
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
