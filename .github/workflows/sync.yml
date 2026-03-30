@@ -71,7 +71,7 @@ jobs:
           README_PATH:      target/README.md
         run: |
           cd "$SCRIPT_DIR"
-          python sync_leetcode.py
+          python sync-leetcode.py
 
       - name: Commit and push to target repo
         env:
