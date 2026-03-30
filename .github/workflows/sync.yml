@@ -74,7 +74,7 @@ jobs:
           LEETCODE_CSRF:    ${{ secrets.LEETCODE_CSRF }}
           OUTPUT_DIR:       target/solutions
           README_PATH:      target/README.md
-        run: python "Leetcode Sync/sync_leetcode.py" run: python Leetcode Sync/sync_leetcode.py
+        run: python "Leetcode Sync/sync_leetcode.py"
 
       # ── 7. Commit and push into the target repo ───────────────────────────
       - name: Commit and push to target repo
