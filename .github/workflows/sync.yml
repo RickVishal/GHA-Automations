@@ -67,11 +67,11 @@ jobs:
         env:
           LEETCODE_SESSION: ${{ secrets.LEETCODE_SESSION }}
           LEETCODE_CSRF:    ${{ secrets.LEETCODE_CSRF }}
-          OUTPUT_DIR:       target/solutions
-          README_PATH:      target/README.md
+          OUTPUT_DIR:       ${{ github.workspace }}/target/solutions
+          README_PATH:      ${{ github.workspace }}/target/README.md
         run: |
           cd "$SCRIPT_DIR"
-          python sync-leetcode.py
+          python sync_leetcode.py
 
       - name: Commit and push to target repo
         env:
