@@ -1,0 +1,57 @@
+name: Sync LeetCode Solutions
+
+on:
+  schedule:
+    # Runs every day at 02:00 UTC — adjust to your liking
+    - cron: "0 2 * * *"
+  workflow_dispatch:   # allows manual trigger from the Actions tab
+
+permissions:
+  contents: write      # needed to push commits
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout the repo ──────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0       # full history so git log works correctly
+
+      # ── 2. Set up Python ─────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # ── 3. Install dependencies ───────────────────────────────────────────
+      - name: Install dependencies
+        run: pip install requests python-slugify
+
+      # ── 4. Run the sync script ────────────────────────────────────────────
+      - name: Sync LeetCode solutions
+        env:
+          LEETCODE_SESSION: ${{ secrets.LEETCODE_SESSION }}
+          LEETCODE_CSRF:    ${{ secrets.LEETCODE_CSRF }}
+        run: python Leetcode Sync/sync_leetcode.py
+
+      # ── 5. Commit and push if anything changed ────────────────────────────
+      - name: Commit and push changes
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add solutions/ README.md
+
+          # Only commit if there are staged changes
+          if git diff --cached --quiet; then
+            echo "No new solutions — nothing to commit."
+          else
+            TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
+            COUNT=$(git diff --cached --name-only | grep "meta.json" | wc -l | tr -d ' ')
+            git commit -m "chore: sync ${COUNT} LeetCode solution(s) [${TIMESTAMP}]"
+            git push
+          fi
