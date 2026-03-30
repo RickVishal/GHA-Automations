@@ -26,9 +26,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: |
-          cd "$SCRIPT_DIR"
-          pip install -r requirements.txt
+        run: pip install requests python-slugify
 
       - name: Create target repo if missing
         env:
