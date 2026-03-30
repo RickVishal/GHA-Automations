@@ -8,6 +8,10 @@ Requirements:
 Environment variables (set as GitHub Secrets):
     LEETCODE_SESSION  - value of the 'LEETCODE_SESSION' cookie
     LEETCODE_CSRF     - value of the 'csrftoken' cookie
+
+Optional env vars (set in workflow):
+    OUTPUT_DIR        - where to write solutions (default: solutions)
+    README_PATH       - where to write README  (default: README.md)
 """
 
 import os
@@ -16,13 +20,12 @@ import time
 import requests
 from pathlib import Path
 from datetime import datetime, timezone
-from slugify import slugify
 
 # ── Config ────────────────────────────────────────────────────────────────────
 SESSION    = os.environ["LEETCODE_SESSION"]
 CSRF_TOKEN = os.environ["LEETCODE_CSRF"]
-OUTPUT_DIR = Path("solutions")
-README     = Path("README.md")
+OUTPUT_DIR = Path(os.environ.get("OUTPUT_DIR", "solutions"))
+README     = Path(os.environ.get("README_PATH", "README.md"))
 
 HEADERS = {
     "Content-Type": "application/json",
@@ -57,7 +60,7 @@ def gql(query: str, variables: dict) -> dict:
 
 
 def fetch_all_accepted() -> list[dict]:
-    """Returns a list of accepted submissions, newest first, deduplicated by slug."""
+    """Returns accepted submissions, newest first, deduplicated by slug."""
     Q = """
     query submissionList($offset: Int!, $limit: Int!, $lastKey: String) {
       submissionList(offset: $offset, limit: $limit, lastKey: $lastKey) {
@@ -91,7 +94,7 @@ def fetch_all_accepted() -> list[dict]:
             break
         last_key = page["lastKey"]
         offset += limit
-        time.sleep(0.5)   # be polite
+        time.sleep(0.5)
 
     return results
 
@@ -116,7 +119,6 @@ def fetch_problem_meta(slug: str) -> dict:
         title
         difficulty
         topicTags { name }
-        content
       }
     }
     """
@@ -127,7 +129,7 @@ def fetch_problem_meta(slug: str) -> dict:
 # ── Core logic ────────────────────────────────────────────────────────────────
 
 def write_solution(sub: dict) -> dict | None:
-    """Write solution file + meta.json. Returns row dict for README, or None if skipped."""
+    """Write solution file + meta.json. Returns row dict, or None on error."""
     slug      = sub["titleSlug"]
     lang      = sub["lang"].lower()
     ext       = LANG_EXT.get(lang, "txt")
@@ -135,21 +137,23 @@ def write_solution(sub: dict) -> dict | None:
     code_file = folder / f"solution.{ext}"
     meta_file = folder / "meta.json"
 
-    # Skip if already exists (avoids redundant API calls on re-runs)
+    # Skip if both files already exist (incremental runs)
     if code_file.exists() and meta_file.exists():
-        existing = json.loads(meta_file.read_text())
-        return existing
+        return json.loads(meta_file.read_text())
 
-    problem = fetch_problem_meta(slug)
-    time.sleep(0.3)
-    code = fetch_code(sub["id"])
-    time.sleep(0.3)
+    try:
+        problem = fetch_problem_meta(slug)
+        time.sleep(0.3)
+        code = fetch_code(sub["id"])
+        time.sleep(0.3)
+    except Exception as e:
+        print(f"  ✗ Failed to fetch {slug}: {e}")
+        return None
 
     folder.mkdir(parents=True, exist_ok=True)
     code_file.write_text(code, encoding="utf-8")
 
-    ts      = int(sub["timestamp"])
-    dt      = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+    dt = datetime.fromtimestamp(int(sub["timestamp"]), tz=timezone.utc).strftime("%Y-%m-%d")
     row = {
         "id":         problem["questionFrontendId"],
         "title":      sub["title"],
@@ -168,33 +172,35 @@ def write_solution(sub: dict) -> dict | None:
 
 def build_readme(rows: list[dict]) -> None:
     rows_sorted = sorted(rows, key=lambda r: int(r["id"]))
+    badge = {"Easy": "🟢", "Medium": "🟡", "Hard": "🔴"}
     lines = [
-        "# LeetCode Solutions\n",
+        "# DSA LeetCode Solutions\n",
         "Auto-synced from LeetCode via GitHub Actions.\n",
         f"> Last updated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}\n",
         "",
         f"**{len(rows_sorted)} problems solved**\n",
         "",
         "| # | Title | Difficulty | Language | Runtime | Memory | Date |",
-        "|---|-------|-----------|----------|---------|--------|------|",
+        "|---|-------|------------|----------|---------|--------|------|",
     ]
     for r in rows_sorted:
-        diff_badge = {"Easy": "🟢", "Medium": "🟡", "Hard": "🔴"}.get(r["difficulty"], "")
-        link = f"[{r['title']}](solutions/{r['slug']}/solution.{LANG_EXT.get(r['language'], 'txt')})"
+        ext  = LANG_EXT.get(r["language"], "txt")
+        link = f"[{r['title']}](solutions/{r['slug']}/solution.{ext})"
+        diff = f"{badge.get(r['difficulty'], '')} {r['difficulty']}"
         lines.append(
-            f"| {r['id']} | {link} | {diff_badge} {r['difficulty']} "
-            f"| {r['language']} | {r['runtime']} | {r['memory']} | {r['date']} |"
+            f"| {r['id']} | {link} | {diff} | {r['language']} "
+            f"| {r['runtime']} | {r['memory']} | {r['date']} |"
         )
 
     README.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"\n README updated — {len(rows_sorted)} entries")
+    print(f"\n📄 README updated — {len(rows_sorted)} entries")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main():
-    OUTPUT_DIR.mkdir(exist_ok=True)
-    print("Fetching accepted submissions…")
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    print("🔍 Fetching accepted submissions…")
     submissions = fetch_all_accepted()
     print(f"   Found {len(submissions)} unique accepted problems\n")
 
@@ -205,7 +211,7 @@ def main():
             rows.append(row)
 
     build_readme(rows)
-    print("\n Sync complete")
+    print("\n✅ Sync complete")
 
 
 if __name__ == "__main__":
